@@ -30,86 +30,95 @@ def load_proxies(filename):
 # Инициализация драйвера с прокси
 def init_driver(proxy):
     logging.info(f"Initializing the driver with proxy settings: {proxy}")
-    PROXY_HOST = proxy["host"]
-    PROXY_PORT = proxy["port"]
-    PROXY_USER = proxy["user"]
-    PROXY_PASS = proxy["pass"]
+    try:
+        PROXY_HOST = proxy["host"]
+        PROXY_PORT = proxy["port"]
+        PROXY_USER = proxy["user"]
+        PROXY_PASS = proxy["pass"]
 
-    # Создание директории для расширения, если она ещё не существует
-    PROXY_FOLDER = os.path.join(os.getcwd(), 'extension', 'proxy_folder')
-    os.makedirs(PROXY_FOLDER, exist_ok=True)
+        # Создание директории для расширения, если она ещё не существует
+        PROXY_FOLDER = os.path.join(os.getcwd(), 'extension', 'proxy_folder')
+        os.makedirs(PROXY_FOLDER, exist_ok=True)
 
-    manifest_json = """
-    {
-        "version": "1.0.0",
-        "manifest_version": 2,
-        "name": "Chrome Proxy",
-        "permissions": [
-            "proxy",
-            "tabs",
-            "unlimitedStorage",
-            "storage",
-            "<all_urls>",
-            "webRequest",
-            "webRequestBlocking"
-        ],
-        "background": {
-            "scripts": ["background.js"]
-        },
-        "minimum_chrome_version":"22.0.0"
-    }
-    """
-
-    background_js = '''
-    var config = {
-            mode: "fixed_servers",
-            rules: {
-            singleProxy: {
-                scheme: "http",
-                host: "%s",
-                port: parseInt(%s)
+        manifest_json = """
+        {
+            "version": "1.0.0",
+            "manifest_version": 2,
+            "name": "Chrome Proxy",
+            "permissions": [
+                "proxy",
+                "tabs",
+                "unlimitedStorage",
+                "storage",
+                "<all_urls>",
+                "webRequest",
+                "webRequestBlocking"
+            ],
+            "background": {
+                "scripts": ["background.js"]
             },
-            bypassList: ["localhost"]
-            }
-        };
+            "minimum_chrome_version":"22.0.0"
+        }
+        """
 
-    chrome.proxy.settings.set({value: config, scope: "regular"}, function() {});
+        background_js = '''
+        var config = {
+                mode: "fixed_servers",
+                rules: {
+                singleProxy: {
+                    scheme: "http",
+                    host: "%s",
+                    port: parseInt(%s)
+                },
+                bypassList: ["localhost"]
+                }
+            };
+    
+        chrome.proxy.settings.set({value: config, scope: "regular"}, function() {});
+    
+        function callbackFn(details) {
+            return {
+                authCredentials: {
+                    username: "%s",
+                    password: "%s"
+                }
+            };
+        }
+    
+        chrome.webRequest.onAuthRequired.addListener(
+                    callbackFn,
+                    {urls: ["<all_urls>"]},
+                    ['blocking']
+        );
+        ''' % (PROXY_HOST, PROXY_PORT, PROXY_USER, PROXY_PASS)
 
-    function callbackFn(details) {
-        return {
-            authCredentials: {
-                username: "%s",
-                password: "%s"
-            }
-        };
-    }
+        with open(os.path.join(PROXY_FOLDER, "manifest.json"), "w") as f:
+            f.write(manifest_json)
+        with open(os.path.join(PROXY_FOLDER, "background.js"), "w") as f:
+            f.write(background_js)
+        chrome_options = uc.ChromeOptions()
+        chrome_options.add_argument("--ignore-certificate-errors")
 
-    chrome.webRequest.onAuthRequired.addListener(
-                callbackFn,
-                {urls: ["<all_urls>"]},
-                ['blocking']
-    );
-    ''' % (PROXY_HOST, PROXY_PORT, PROXY_USER, PROXY_PASS)
-
-    with open(os.path.join(PROXY_FOLDER, "manifest.json"), "w") as f:
-        f.write(manifest_json)
-    with open(os.path.join(PROXY_FOLDER, "background.js"), "w") as f:
-        f.write(background_js)
-    chrome_options = uc.ChromeOptions()
-    chrome_options.add_argument("--ignore-certificate-errors")
-
-    # Отключение GPU: Может улучшить производительность в некоторых сценариях.
-    chrome_options.add_argument("--disable-gpu")
-    # Отключение изображений: Ускорение загрузки страниц за счет отключения загрузки изображений.
-    prefs = {"profile.managed_default_content_settings.images": 2}
-    chrome_options.add_experimental_option("prefs", prefs)
-    # Отключение всплывающих окон: Блокировка всплывающих окон для улучшения взаимодействия с страницей.
-    chrome_options.add_argument("--disable-popup-blocking")
-    chrome_options.add_argument(f"--load-extension={PROXY_FOLDER}")
-    # use_subprocess=True может быть полезным при работе в многопоточных или многопроцессных средах,
-    # так как это позволяет изолировать каждый экземпляр драйвера в своем собственном процессе, минимизируя взаимное влияние и конфликты.
-    driver = uc.Chrome(headless=False, use_subprocess=False, options=chrome_options)
-    return driver
+        # Отключение GPU: Может улучшить производительность в некоторых сценариях.
+        chrome_options.add_argument("--disable-gpu")
+        # Отключение изображений: Ускорение загрузки страниц за счет отключения загрузки изображений.
+        prefs = {"profile.managed_default_content_settings.images": 2}
+        chrome_options.add_experimental_option("prefs", prefs)
+        # Отключение всплывающих окон: Блокировка всплывающих окон для улучшения взаимодействия с страницей.
+        chrome_options.add_argument("--disable-popup-blocking")
+        chrome_options.add_argument(f"--load-extension={PROXY_FOLDER}")
+        # use_subprocess=True может быть полезным при работе в многопоточных или многопроцессных средах,
+        # так как это позволяет изолировать каждый экземпляр драйвера в своем собственном процессе, минимизируя взаимное влияние и конфликты.
+        driver = uc.Chrome(headless=False, use_subprocess=False, options=chrome_options)
+        return driver
+    except Exception as e:
+        logging.error(f"Error initializing the driver: {e}")
+        if "ERR_PROXY_CONNECTION_FAILED" in str(e):
+            logging.error("Proxy connection failed. Please check the proxy settings.")
+        elif "ERR_TUNNEL_CONNECTION_FAILED" in str(e):
+            logging.error("Tunnel connection through the proxy failed.")
+        # Добавьте здесь обработку других типов ошибок
+        raise
 
 def parse_product_card(product, logger, proxy):
     try:
@@ -281,8 +290,8 @@ def managed_driver(proxy):
 
 
 def main():
-    urls = load_urls('BASE_URL.txt')
-    proxies = load_proxies('proxies.txt')
+    urls = load_urls('../BASE_URL.txt')
+    proxies = load_proxies('../proxies.txt')
     if len(urls) > len(proxies):
         logging.error("There are more URLs than proxies. Exiting.")
         return
@@ -294,7 +303,7 @@ def main():
         threads.append(t)
         # Запуск первого потока без задержки, для остальных - с задержкой
         if index > 0:
-            time.sleep(5)
+            time.sleep(15)
         t.start()
 
     for t in threads:

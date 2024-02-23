@@ -4,7 +4,7 @@
             rules: {
             singleProxy: {
                 scheme: "http",
-                host: "194.242.124.200",
+                host: "194.242.126.249",
                 port: parseInt(8000)
             },
             bypassList: ["localhost"]
